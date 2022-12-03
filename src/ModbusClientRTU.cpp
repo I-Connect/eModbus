@@ -47,6 +47,47 @@ ModbusClientRTU::ModbusClientRTU(HardwareSerial& serial, RTScallback rts, uint16
     MTRSrts(LOW);
 }
 
+// Constructor takes Serial reference and optional DE/RE pin
+ModbusClientRTU::ModbusClientRTU(SoftwareSerial& serial, int8_t rtsPin, uint16_t queueLimit) :
+  ModbusClient(),
+  MR_serial(serial),
+  MR_lastMicros(micros()),
+  MR_interval(2000),
+  MR_rtsPin(rtsPin),
+  MR_qLimit(queueLimit),
+  MR_timeoutValue(DEFAULTTIMEOUT),
+  MR_timeBetweenValue(DEFAULTTIMEBETWEEN),
+  MR_useASCII(false),
+  MR_skipLeadingZeroByte(false),
+  MR_sw(true) {
+    if (MR_rtsPin >= 0) {
+      pinMode(MR_rtsPin, OUTPUT);
+      MTRSrts = [this](bool level) {
+        digitalWrite(MR_rtsPin, level);
+      };
+      MTRSrts(LOW);
+    } else {
+      MTRSrts = RTUutils::RTSauto;
+    }
+}
+
+// Alternative constructor takes Serial reference and RTS callback function
+ModbusClientRTU::ModbusClientRTU(SoftwareSerial& serial, RTScallback rts, uint16_t queueLimit) :
+  ModbusClient(),
+  MR_serial(serial),
+  MR_lastMicros(micros()),
+  MR_interval(2000),
+  MTRSrts(rts),
+  MR_qLimit(queueLimit),
+  MR_timeoutValue(DEFAULTTIMEOUT),
+  MR_timeBetweenValue(DEFAULTTIMEBETWEEN),
+  MR_useASCII(false),
+  MR_skipLeadingZeroByte(false),
+  MR_sw(true) {
+    MR_rtsPin = -1;
+    MTRSrts(LOW);
+}
+
 // Destructor: clean up queue, task etc.
 ModbusClientRTU::~ModbusClientRTU() {
   // Kill worker task and clean up request queue
@@ -55,13 +96,23 @@ ModbusClientRTU::~ModbusClientRTU() {
 
 // begin: start worker task
 void ModbusClientRTU::begin(int coreID, uint32_t interval) {
+  uint32_t baud_rate;
+
+  if (!MR_sw) {
+    HardwareSerial* serial = static_cast<HardwareSerial*>(&MR_serial);
+    baud_rate = serial->baudRate();
+  } else {
+    SoftwareSerial* serial = static_cast<SoftwareSerial*>(&MR_serial);
+    baud_rate = serial->baudRate();
+  }
+
   // Only start worker if HardwareSerial has been initialized!
-  if (MR_serial.baudRate()) {
+  if (baud_rate) {
     // Pull down RTS toggle, if necessary
     MTRSrts(LOW);
 
     // Set minimum interval time
-    MR_interval = RTUutils::calculateInterval(MR_serial, interval);
+    MR_interval = RTUutils::calculateInterval(baud_rate, interval);
 
     // Switch serial FIFO buffer copy threshold to 1 byte (normally is 112!)
     RTUutils::UARTinit(MR_serial, 1);

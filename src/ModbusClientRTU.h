@@ -11,6 +11,7 @@
 
 #include "ModbusClient.h"
 #include "HardwareSerial.h"
+#include "SoftwareSerial.h"
 #include "RTUutils.h"
 #include <queue>
 #include <vector>
@@ -18,83 +19,94 @@
 using std::queue;
 
 #define DEFAULTTIMEOUT 2000
+#define DEFAULTTIMEBETWEEN 0
 
 class ModbusClientRTU : public ModbusClient {
-public:
-  // Constructor takes Serial reference and optional DE/RE pin and queue limit
-  explicit ModbusClientRTU(HardwareSerial& serial, int8_t rtsPin = -1, uint16_t queueLimit = 100);
+  public:
+    // Constructor takes Serial reference and optional DE/RE pin and queue limit
+    explicit ModbusClientRTU(HardwareSerial& serial, int8_t rtsPin = -1, uint16_t queueLimit = 100);
 
-  // Alternative Constructor takes Serial reference and RTS line toggle callback
-  explicit ModbusClientRTU(HardwareSerial& serial, RTScallback rts, uint16_t queueLimit = 100);
+    // Alternative Constructor takes Serial reference and RTS line toggle callback
+    explicit ModbusClientRTU(HardwareSerial& serial, RTScallback rts, uint16_t queueLimit = 100);
 
-  // Destructor: clean up queue, task etc.
-  ~ModbusClientRTU();
+    // Same constructors for SoftwareSerial
+    // Constructor takes Serial reference and optional DE/RE pin and queue limit
+    explicit ModbusClientRTU(SoftwareSerial& serial, int8_t rtsPin = -1, uint16_t queueLimit = 100);
+    // Alternative Constructor takes Serial reference and RTS line toggle callback
+    explicit ModbusClientRTU(SoftwareSerial& serial, RTScallback rts, uint16_t queueLimit = 100);
 
-  // begin: start worker task
-  void begin(int coreID = -1, uint32_t interval = 0);
+    // Destructor: clean up queue, task etc.
+    ~ModbusClientRTU();
 
-  // end: stop the worker
-  void end();
+    // begin: start worker task
+    void begin(int coreID = -1, uint32_t interval = 0);
 
-  // Set default timeout value for interface
-  void setTimeout(uint32_t TOV);
+    // end: stop the worker
+    void end();
 
-  // Toggle protocol to ModbusASCII
-  void useModbusASCII(unsigned long timeout = 1000);
+    // Set default timeout value for interface
+    void setTimeout(uint32_t TOV);
 
-  // Toggle protocol to ModbusRTU
-  void useModbusRTU();
+    // Toggle protocol to ModbusASCII
+    void useModbusASCII(unsigned long timeout = 1000);
 
-  // Inquire protocol mode
-  bool isModbusASCII();
+    // Toggle protocol to ModbusRTU
+    void useModbusRTU();
 
-  // Toggle skipping of leading 0x00 byte
-  void skipLeading0x00(bool onOff = true);
+    // Inquire protocol mode
+    bool isModbusASCII();
 
-  // Return number of unprocessed requests in queue
-  uint32_t pendingRequests();
+    // Toggle skipping of leading 0x00 byte
+    void skipLeading0x00(bool onOff = true);
 
-  // addBroadcastMessage: create a fire-and-forget message to all servers on the RTU bus
-  Error addBroadcastMessage(const uint8_t *data, uint8_t len);
+    // Return number of unprocessed requests in queue
+    uint32_t pendingRequests();
 
-protected:
-  struct RequestEntry {
-    uint32_t token;
-    ModbusMessage msg;
-    bool isSyncRequest;
-    RequestEntry(uint32_t t, ModbusMessage m, bool syncReq = false) :
-      token(t),
-      msg(m),
-      isSyncRequest(syncReq) {}
-  };
+    // addBroadcastMessage: create a fire-and-forget message to all servers on the RTU bus
+    Error addBroadcastMessage(const uint8_t* data, uint8_t len);
 
-  // Base addRequest and syncRequest must be present
-  Error addRequestM(ModbusMessage msg, uint32_t token);
-  ModbusMessage syncRequestM(ModbusMessage msg, uint32_t token);
+  protected:
+    struct RequestEntry {
+      uint32_t token;
+      ModbusMessage msg;
+      bool isSyncRequest;
+      RequestEntry(uint32_t t, ModbusMessage m, bool syncReq = false) :
+        token(t),
+        msg(m),
+        isSyncRequest(syncReq) {}
+    };
 
-  // addToQueue: send freshly created request to queue
-  bool addToQueue(uint32_t token, ModbusMessage msg, bool syncReq = false);
+    // Base addRequest and syncRequest must be present
+    Error addRequestM(ModbusMessage msg, uint32_t token);
+    ModbusMessage syncRequestM(ModbusMessage msg, uint32_t token);
 
-  // handleConnection: worker task method
-  static void handleConnection(ModbusClientRTU *instance);
+    // addToQueue: send freshly created request to queue
+    bool addToQueue(uint32_t token, ModbusMessage msg, bool syncReq = false);
 
-  // receive: get response via Serial
-  ModbusMessage receive(const ModbusMessage request);
+    // handleConnection: worker task method
+    static void handleConnection(ModbusClientRTU* instance);
 
-  void isInstance() { return; }   // make class instantiable
-  queue<RequestEntry> requests;   // Queue to hold requests to be processed
-  #if USE_MUTEX
-  mutex qLock;                    // Mutex to protect queue
-  #endif
-  HardwareSerial& MR_serial;      // Ptr to the serial interface used
-  unsigned long MR_lastMicros;    // Microseconds since last bus activity
-  uint32_t MR_interval;           // Modbus RTU bus quiet time
-  int8_t MR_rtsPin;               // GPIO pin to toggle RS485 DE/RE line. -1 if none.
-  RTScallback MTRSrts;            // RTS line callback function
-  uint16_t MR_qLimit;             // Maximum number of requests to hold in the queue
-  uint32_t MR_timeoutValue;       // Interface default timeout
-  bool MR_useASCII;               // true=ModbusASCII, false=ModbusRTU
-  bool MR_skipLeadingZeroByte;    // true=skip the first byte if it is 0x00, false=accept all bytes
+    // receive: get response via Serial
+    ModbusMessage receive(const ModbusMessage request);
+
+    void isInstance() {
+      return;  // make class instantiable
+    }
+    queue<RequestEntry> requests;   // Queue to hold requests to be processed
+    #if USE_MUTEX
+    mutex qLock;                    // Mutex to protect queue
+    #endif
+    Stream& MR_serial;      // Ptr to the serial interface used
+    unsigned long MR_lastMicros;    // Microseconds since last bus activity
+    uint32_t MR_interval;           // Modbus RTU bus quiet time
+    int8_t MR_rtsPin;               // GPIO pin to toggle RS485 DE/RE line. -1 if none.
+    RTScallback MTRSrts;            // RTS line callback function
+    uint16_t MR_qLimit;             // Maximum number of requests to hold in the queue
+    uint32_t MR_timeoutValue;       // Interface default timeout
+    bool MR_useASCII;               // true=ModbusASCII, false=ModbusRTU
+    bool MR_skipLeadingZeroByte;    // true=skip the first byte if it is 0x00, false=accept all bytes
+    bool MR_sw;
+    uint32_t MR_timeBetweenValue;
 
 };
 
