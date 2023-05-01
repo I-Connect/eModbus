@@ -65,7 +65,7 @@ class ModbusClientRTU : public ModbusClient {
     // addBroadcastMessage: create a fire-and-forget message to all servers on the RTU bus
     Error addBroadcastMessage(const uint8_t* data, uint8_t len);
 
-  protected:
+    // protected:
     struct RequestEntry {
       uint32_t token;
       ModbusMessage msg;
@@ -105,7 +105,7 @@ class ModbusClientRTU : public ModbusClient {
     uint32_t MR_timeoutValue;       // Interface default timeout
     bool MR_useASCII;               // true=ModbusASCII, false=ModbusRTU
     bool MR_skipLeadingZeroByte;    // true=skip the first byte if it is 0x00, false=accept all bytes
-    bool MR_sw;
+    bool MR_sw = false;
     uint32_t MR_timeBetweenValue;
 
 };
